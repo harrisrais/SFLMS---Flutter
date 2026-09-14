@@ -7,6 +7,13 @@ import '../../services/notification_service.dart';
 import '../login_page.dart';
 import '../profile_page.dart';
 
+/// FR-07 Admin Review and Confirmation: logistics managers review pending
+/// requests, validate route/load details, and approve or reject them.
+/// FR-08 Initial Security Deposit: approving a request also sets up the
+/// 10% commitment fee (amount, unpaid status, 24h due time) that the
+/// customer pays from My Requests. Every status change writes a
+/// notification for the customer via NotificationService (an in-app
+/// stand-in for FR-16's FCM push).
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
 
@@ -14,55 +21,20 @@ class AdminHomePage extends StatefulWidget {
   State<AdminHomePage> createState() => _AdminHomePageState();
 }
 
-class _AdminHomePageState extends State<AdminHomePage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+class _AdminHomePageState extends State<AdminHomePage> {
+  final FirebaseFirestore _firestore = AuthService.firestore;
   bool _processing = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _tabController = TabController(
-      length: 3,
-      vsync: this,
-    );
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   Future<void> _logout() async {
     await AuthService.signOut();
-
     if (!mounted) return;
-
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
     );
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _requestsStream(
-    String status,
-  ) {
-    return _firestore
-        .collection('shipmentRequests')
-        .where('status', isEqualTo: status)
-        .snapshots();
-  }
-
-  Future<void> _approveRequest(
-    ShipmentRequest request,
-  ) async {
+  Future<void> _approveRequest(ShipmentRequest request) async {
     if (_processing) return;
 
     setState(() {
@@ -70,21 +42,25 @@ class _AdminHomePageState extends State<AdminHomePage>
     });
 
     try {
-      await _firestore
-          .collection('shipmentRequests')
-          .doc(request.id)
-          .update({
+      await _firestore.collection('shipmentRequests').doc(request.id).update({
         'status': 'approved',
         'rejectionReason': FieldValue.delete(),
         'reviewedAt': FieldValue.serverTimestamp(),
         'reviewedBy': AuthService.auth.currentUser?.uid,
+        // FR-08: set up the commitment fee the customer must pay within 24h.
+        'commitmentFeeAmount': request.totalQuote * 0.10,
+        'commitmentFeeStatus': 'unpaid',
+        'commitmentFeeDueAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(hours: 24)),
+        ),
       });
 
       await NotificationService.create(
         userId: request.customerId,
         title: 'Request Approved',
         body:
-            'Your shipment request from ${request.pickupCity} to ${request.destinationCity} has been approved.',
+            'Your shipment request from ${request.pickupCity} to ${request.destinationCity} has been approved. '
+            'Please pay the commitment fee within 24 hours to confirm your booking.',
         type: 'approved',
         requestId: request.id,
       );
@@ -115,9 +91,7 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
   }
 
-  Future<void> _rejectRequest(
-    ShipmentRequest request,
-  ) async {
+  Future<void> _rejectRequest(ShipmentRequest request) async {
     final reasonController = TextEditingController();
 
     final reason = await showDialog<String>(
@@ -131,9 +105,7 @@ class _AdminHomePageState extends State<AdminHomePage>
             children: [
               Text(
                 'Provide a reason for rejecting this request.',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(color: Colors.grey.shade700),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -178,10 +150,7 @@ class _AdminHomePageState extends State<AdminHomePage>
       },
     );
 
-    reasonController.dispose();
-
-    if (reason == null || reason.trim().isEmpty) return;
-
+    if (reason == null) return;
     if (_processing) return;
 
     setState(() {
@@ -189,12 +158,9 @@ class _AdminHomePageState extends State<AdminHomePage>
     });
 
     try {
-      await _firestore
-          .collection('shipmentRequests')
-          .doc(request.id)
-          .update({
+      await _firestore.collection('shipmentRequests').doc(request.id).update({
         'status': 'rejected',
-        'rejectionReason': reason.trim(),
+        'rejectionReason': reason,
         'reviewedAt': FieldValue.serverTimestamp(),
         'reviewedBy': AuthService.auth.currentUser?.uid,
       });
@@ -203,7 +169,8 @@ class _AdminHomePageState extends State<AdminHomePage>
         userId: request.customerId,
         title: 'Request Rejected',
         body:
-            'Your shipment request from ${request.pickupCity} to ${request.destinationCity} was rejected. Reason: ${reason.trim()}',
+            'Your shipment request from ${request.pickupCity} to ${request.destinationCity} was rejected. '
+            'Reason: $reason',
         type: 'rejected',
         requestId: request.id,
       );
@@ -234,382 +201,247 @@ class _AdminHomePageState extends State<AdminHomePage>
     }
   }
 
-  ShipmentRequest _requestFromDoc(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    return ShipmentRequest.fromDoc(doc);
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Admin Review'),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.person_outline),
+              tooltip: 'Profile',
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProfilePage())),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded),
+              tooltip: 'Logout',
+              onPressed: _logout,
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Pending'),
+              Tab(text: 'Approved'),
+              Tab(text: 'Rejected'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _RequestsList(
+              status: 'pending',
+              processing: _processing,
+              onApprove: _approveRequest,
+              onReject: _rejectRequest,
+            ),
+            _RequestsList(
+              status: 'approved',
+              processing: _processing,
+              onApprove: _approveRequest,
+              onReject: _rejectRequest,
+            ),
+            _RequestsList(
+              status: 'rejected',
+              processing: _processing,
+              onApprove: _approveRequest,
+              onReject: _rejectRequest,
+            ),
+          ],
+        ),
+      ),
+    );
   }
+}
 
-  Widget _buildRequestList(String status) {
+class _RequestsList extends StatelessWidget {
+  const _RequestsList({
+    required this.status,
+    required this.processing,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final String status;
+  final bool processing;
+  final ValueChanged<ShipmentRequest> onApprove;
+  final ValueChanged<ShipmentRequest> onReject;
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _requestsStream(status),
+      stream: AuthService.firestore
+          .collection('shipmentRequests')
+          .where('status', isEqualTo: status)
+          .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         if (snapshot.hasError) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text(
-                'Unable to load requests.\n\n${snapshot.error}',
-                textAlign: TextAlign.center,
-              ),
+              child: Text('Could not load requests: ${snapshot.error}'),
             ),
           );
         }
+        final requests =
+            (snapshot.data?.docs ??
+                    const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                .map(ShipmentRequest.fromDoc)
+                .toList()
+              ..sort((a, b) {
+                final aTime = a.createdAt?.millisecondsSinceEpoch ?? 0;
+                final bTime = b.createdAt?.millisecondsSinceEpoch ?? 0;
+                return bTime.compareTo(aTime);
+              });
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-
-        if (docs.isEmpty) {
-          return _buildEmptyState(status);
-        }
-
-        final requests = docs
-            .map(_requestFromDoc)
-            .toList()
-          ..sort((a, b) {
-            final aDate = a.createdAt?.toDate();
-            final bDate = b.createdAt?.toDate();
-
-            if (aDate == null && bDate == null) return 0;
-            if (aDate == null) return 1;
-            if (bDate == null) return -1;
-
-            return bDate.compareTo(aDate);
-          });
-
-        return RefreshIndicator(
-          onRefresh: () async {
-            // Firestore snapshots update automatically.
-            await Future<void>.delayed(
-              const Duration(milliseconds: 300),
-            );
-          },
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: requests.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              return _buildRequestCard(requests[index]);
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState(String status) {
-    String message;
-
-    switch (status) {
-      case 'pending':
-        message = 'No pending requests.';
-        break;
-      case 'approved':
-        message = 'No approved requests yet.';
-        break;
-      case 'rejected':
-        message = 'No rejected requests.';
-        break;
-      default:
-        message = 'No requests found.';
-    }
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              status == 'pending'
-                  ? Icons.inbox_outlined
-                  : status == 'approved'
-                      ? Icons.check_circle_outline
-                      : Icons.cancel_outlined,
-              size: 64,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRequestCard(ShipmentRequest request) {
-    final isPending = request.status == 'pending';
-
-    final statusColor = request.status == 'approved'
-        ? const Color(0xFF16A34A)
-        : request.status == 'rejected'
-            ? const Color(0xFFDC2626)
-            : const Color(0xFFD97706);
-
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${request.pickupCity} → ${request.destinationCity}',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    request.status.toUpperCase(),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _infoRow(
-              Icons.person_outline,
-              'Customer',
-              request.customerName,
-            ),
-            _infoRow(
-              Icons.local_shipping_outlined,
-              'Vehicle',
-              request.vehicleRegistrationNo,
-            ),
-            _infoRow(
-              Icons.category_outlined,
-              'Category',
-              request.categoryName,
-            ),
-            _infoRow(
-              Icons.inventory_2_outlined,
-              'Goods',
-              request.goodsType,
-            ),
-            _infoRow(
-              Icons.scale_outlined,
-              'Weight',
-              '${request.estimatedWeightKg.toStringAsFixed(1)} kg',
-            ),
-            _infoRow(
-              Icons.route_outlined,
-              'Distance',
-              '${request.distanceKm.toStringAsFixed(1)} km',
-            ),
-            _infoRow(
-              Icons.payments_outlined,
-              'Quote',
-              'Rs ${request.totalQuote.toStringAsFixed(0)}',
-            ),
-            if (request.rejectionReason != null &&
-                request.rejectionReason!.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFFECACA),
-                  ),
-                ),
-                child: Text(
-                  'Rejection reason: ${request.rejectionReason}',
-                  style: const TextStyle(
-                    color: Color(0xFFB91C1C),
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-            if (request.createdAt != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Submitted: ${_formatTimestamp(request.createdAt!)}',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-            if (isPending) ...[
-              const SizedBox(height: 16),
-              Row(
+        if (requests.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _processing
-                          ? null
-                          : () => _rejectRequest(request),
-                      icon: const Icon(Icons.close),
-                      label: const Text('Reject'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626),
-                        side: const BorderSide(
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                    ),
+                  const Icon(
+                    Icons.inbox_outlined,
+                    size: 48,
+                    color: Colors.grey,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _processing
-                          ? null
-                          : () => _approveRequest(request),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Approve'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
-                      ),
-                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No $status requests',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _infoRow(
-    IconData icon,
-    String label,
-    String value,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: Colors.grey.shade600,
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 75,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+          );
+        }
 
-  String _formatTimestamp(Timestamp timestamp) {
-    final date = timestamp.toDate();
-
-    final hour = date.hour > 12
-        ? date.hour - 12
-        : date.hour == 0
-            ? 12
-            : date.hour;
-
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-
-    return '${date.day}/${date.month}/${date.year} $hour:$minute $period';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Review'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: 'Profile',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ProfilePage(),
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final request = requests[index];
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${request.pickupCity} \u2192 ${request.destinationCity}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${request.categoryName} \u00b7 ${request.vehicleRegistrationNo} \u00b7 ${request.distanceKm.toStringAsFixed(0)} km',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    Text(
+                      '${request.goodsType.isEmpty ? 'Goods' : request.goodsType} \u00b7 '
+                      '${request.estimatedWeightKg.toStringAsFixed(0)} kg \u00b7 '
+                      '${request.urgency == 'express' ? 'Express' : 'Standard'}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    Text(
+                      'Customer: ${request.customerName.isEmpty ? request.customerId : request.customerName}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    if (request.addOns.values.any((v) => v)) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (request.addOns['fragileHandling'] == true)
+                            const Chip(label: Text('Fragile Handling')),
+                          if (request.addOns['insurance'] == true)
+                            const Chip(label: Text('Insurance')),
+                          if (request.addOns['packing'] == true)
+                            const Chip(label: Text('Packing')),
+                          if (request.addOns['labor'] == true)
+                            const Chip(label: Text('Labor')),
+                        ],
+                      ),
+                    ],
+                    if (request.status == 'rejected' &&
+                        (request.rejectionReason ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Reason: ${request.rejectionReason}',
+                        style: const TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Text(
+                      'Quote: Rs ${request.totalQuote.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: Color(0xFF0F766E),
+                      ),
+                    ),
+                    if (request.commitmentFeeStatus != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Deposit: Rs ${(request.commitmentFeeAmount ?? 0).toStringAsFixed(0)} \u2014 ${request.commitmentFeeStatus}',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    if (status == 'pending') ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: processing
+                                  ? null
+                                  : () => onReject(request),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFDC2626),
+                              ),
+                              child: const Text('Reject'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: processing
+                                  ? null
+                                  : () => onApprove(request),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F766E),
+                              ),
+                              child: const Text('Approve'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: _logout,
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.pending_actions),
-              text: 'Pending',
-            ),
-            Tab(
-              icon: Icon(Icons.check_circle_outline),
-              text: 'Approved',
-            ),
-            Tab(
-              icon: Icon(Icons.cancel_outlined),
-              text: 'Rejected',
-            ),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildRequestList('pending'),
-          _buildRequestList('approved'),
-          _buildRequestList('rejected'),
-        ],
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

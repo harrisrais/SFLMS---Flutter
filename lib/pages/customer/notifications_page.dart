@@ -5,127 +5,71 @@ import '../../models/app_notification.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 
+/// Shows booking-status notifications (approved/rejected/cancelled, and
+/// later payment/dispatch/delivery updates) written by admin actions or the
+/// FR-11 auto-cancel job. Tapping a notification marks it read. This is the
+/// in-app view of what FR-16 will eventually also push via FCM.
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
-  String _formatDate(Timestamp? timestamp) {
-    if (timestamp == null) return '';
-
-    final date = timestamp.toDate();
-
-    final hour = date.hour > 12
-        ? date.hour - 12
-        : date.hour == 0
-            ? 12
-            : date.hour;
-
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-
-    return '${date.day}/${date.month}/${date.year} $hour:$minute $period';
-  }
-
-  IconData _iconForNotification(String? type) {
-    switch (type) {
-      case 'approved':
-        return Icons.check_circle_outline;
-      case 'rejected':
-        return Icons.cancel_outlined;
-      case 'request':
-        return Icons.receipt_long_outlined;
-      default:
-        return Icons.notifications_outlined;
-    }
-  }
-
-  Color _colorForNotification(String? type) {
-    switch (type) {
-      case 'approved':
-        return const Color(0xFF16A34A);
-      case 'rejected':
-        return const Color(0xFFDC2626);
-      default:
-        return const Color(0xFF0F766E);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final userId = AuthService.auth.currentUser?.uid ?? '';
-
+    final uid = AuthService.auth.currentUser?.uid;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        actions: [
-          if (userId.isNotEmpty)
-            TextButton(
-              onPressed: () async {
-                await NotificationService.markAllAsRead(userId);
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All notifications marked as read'),
-                    ),
-                  );
-                }
-              },
-              child: const Text('Mark all read'),
-            ),
-        ],
-      ),
-      body: userId.isEmpty
-          ? const Center(
-              child: Text('Please sign in to view notifications.'),
-            )
+      appBar: AppBar(title: const Text('Notifications'), centerTitle: true),
+      body: uid == null
+          ? const Center(child: Text('Not logged in.'))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: NotificationService.streamForUser(userId),
+              stream: NotificationService.streamForUser(uid),
               builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 if (snapshot.hasError) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'Unable to load notifications.\n\n${snapshot.error}',
-                        textAlign: TextAlign.center,
+                        'Could not load notifications: ${snapshot.error}',
                       ),
                     ),
                   );
                 }
+                final notifications =
+                    (snapshot.data?.docs ??
+                            const <
+                              QueryDocumentSnapshot<Map<String, dynamic>>
+                            >[])
+                        .map(AppNotification.fromDoc)
+                        .toList()
+                      ..sort((a, b) {
+                        final aTime = a.createdAt?.millisecondsSinceEpoch ?? 0;
+                        final bTime = b.createdAt?.millisecondsSinceEpoch ?? 0;
+                        return bTime.compareTo(aTime);
+                      });
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                final docs = snapshot.data?.docs ?? [];
-
-                if (docs.isEmpty) {
-                  return const Center(
+                if (notifications.isEmpty) {
+                  return Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.notifications_none,
-                            size: 64,
+                          const Icon(
+                            Icons.notifications_none_outlined,
+                            size: 48,
                             color: Colors.grey,
                           ),
-                          SizedBox(height: 16),
-                          Text(
+                          const SizedBox(height: 12),
+                          const Text(
                             'No notifications yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Text(
-                            'Updates about your shipment requests will appear here.',
+                            'You will see booking updates here once an admin reviews your requests.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: Colors.grey.shade700),
                           ),
                         ],
                       ),
@@ -133,106 +77,33 @@ class NotificationsPage extends StatelessWidget {
                   );
                 }
 
-                final notifications = docs
-                    .map(AppNotification.fromDoc)
-                    .toList();
-
                 return ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: notifications.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final notification = notifications[index];
-                    final color =
-                        _colorForNotification(notification.type);
-
                     return Card(
-                      elevation: notification.read ? 0 : 2,
-                      color: notification.read
-                          ? Colors.white
-                          : const Color(0xFFF0FDFA),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () async {
-                          if (!notification.read) {
-                            await NotificationService.markAsRead(
-                              notification.id,
-                            );
-                          }
+                      color: notification.read ? null : const Color(0xFFECFEFF),
+                      child: ListTile(
+                        onTap: () {
+                          if (!notification.read)
+                            NotificationService.markRead(notification.id);
                         },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  _iconForNotification(notification.type),
-                                  color: color,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            notification.title,
-                                            style: TextStyle(
-                                              fontWeight: notification.read
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w800,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ),
-                                        if (!notification.read)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF0F766E),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      notification.body,
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                    if (notification.createdAt != null) ...[
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _formatDate(
-                                          notification.createdAt,
-                                        ),
-                                        style: TextStyle(
-                                          color: Colors.grey.shade500,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                        leading: Icon(
+                          notification.read
+                              ? Icons.notifications_none_outlined
+                              : Icons.notifications_active_outlined,
+                          color: notification.read
+                              ? Colors.grey
+                              : const Color(0xFF0F766E),
                         ),
+                        title: Text(
+                          notification.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(notification.body),
+                        isThreeLine: true,
                       ),
                     );
                   },
