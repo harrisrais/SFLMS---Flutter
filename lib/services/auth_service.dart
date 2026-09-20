@@ -106,28 +106,16 @@ class AuthService {
 
   static Future<void> ensurePhoneRole({required String role}) => _ensureRole(role);
 
-static Future<void> _ensureRole(String role) async {
-  final user = auth.currentUser;
-
-  if (user == null) return;
-
-  final profile =
-      await firestore.collection('users').doc(user.uid).get();
-
-  final storedRole =
-      profile.data()?['role'] as String?;
-
-  if (storedRole != null && storedRole != role) {
-    await auth.signOut();
-
-    throw FirebaseAuthException(
-      code: 'wrong-role',
-      message:
-          'This account is registered as a $storedRole.',
-    );
+  static Future<void> _ensureRole(String role) async {
+    final user = auth.currentUser;
+    if (user == null) return;
+    final profile = await firestore.collection('users').doc(user.uid).get();
+    final storedRole = profile.data()?['role'] as String?;
+    if (storedRole != null && storedRole != role) {
+      await auth.signOut();
+      throw FirebaseAuthException(code: 'wrong-role', message: 'This account is registered as a ${storedRole == 'driver' ? 'driver' : 'customer'}.');
+    }
   }
-  
-}
 
   static Future<void> sendPasswordReset({required String email}) async {
     if (!isReady) throw StateError('Firebase has not been configured. Update firebase_options.dart with your project config.');
@@ -135,44 +123,123 @@ static Future<void> _ensureRole(String role) async {
   }
 
   static Future<ConfirmationResult?> sendPhoneCode({
-    required String phoneNumber,
-    String? email,
-    required void Function(String verificationId, int? resendToken) onCodeSent,
-    required void Function(FirebaseAuthException error) onVerificationFailed,
-    required void Function(PhoneAuthCredential credential) onVerificationCompleted,
-  }) async {
-    if (!isReady) throw StateError('Firebase has not been configured. Update firebase_options.dart with your project config.');
-    if (email != null && !await isPhoneRegisteredForEmail(phoneNumber: phoneNumber, email: email)) {
-      throw FirebaseAuthException(code: 'phone-not-registered', message: 'This email is not registered with that phone number.');
-    }
-    if (kIsWeb) return auth.signInWithPhoneNumber(normalizePhone(phoneNumber));
-    await auth.verifyPhoneNumber(
-      phoneNumber: normalizePhone(phoneNumber),
-      verificationCompleted: onVerificationCompleted,
-      verificationFailed: onVerificationFailed,
-      codeSent: onCodeSent,
-      codeAutoRetrievalTimeout: (verificationId) => onCodeSent(verificationId, null),
+  required String phoneNumber,
+  String? email,
+  required void Function(String verificationId, int? resendToken) onCodeSent,
+  required void Function(FirebaseAuthException error) onVerificationFailed,
+  required void Function(PhoneAuthCredential credential) onVerificationCompleted,
+}) async {
+  if (!isReady) {
+    throw StateError(
+      'Firebase has not been configured. Update firebase_options.dart with your project config.',
     );
-    return null;
   }
 
-  static Future<UserCredential> confirmPhoneCode({
-    required String code,
-    ConfirmationResult? confirmationResult,
-    String? verificationId,
-    bool linkToCurrentUser = false,
-  }) async {
-    if (kIsWeb) {
-      if (confirmationResult == null) throw FirebaseAuthException(code: 'missing-verification', message: 'Request a verification code first.');
-      return confirmationResult.confirm(code.trim());
+  final phone = normalizePhone(phoneNumber);
+
+  debugPrint('PHONE AUTH START');
+  debugPrint('Phone: $phone');
+
+  if (email != null && email.trim().isNotEmpty) {
+    final registered = await isPhoneRegisteredForEmail(
+      phoneNumber: phoneNumber,
+      email: email,
+    );
+
+    debugPrint('Phone/email registered: $registered');
+
+    if (!registered) {
+      throw FirebaseAuthException(
+        code: 'phone-not-registered',
+        message: 'This email is not registered with that phone number.',
+      );
     }
-    if (verificationId == null || verificationId.isEmpty) {
-      throw FirebaseAuthException(code: 'missing-verification', message: 'Request a verification code first.');
-    }
-    final credential = PhoneAuthProvider.credential(verificationId: verificationId, smsCode: code.trim());
-    if (linkToCurrentUser) return auth.currentUser!.linkWithCredential(credential);
-    return auth.signInWithCredential(credential);
   }
+
+  if (kIsWeb) {
+    debugPrint('Starting web phone authentication...');
+
+    try {
+      final result = await auth.signInWithPhoneNumber(phone);
+
+      debugPrint('Verification code sent successfully.');
+
+      return result;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('PHONE AUTH ERROR: ${e.code}');
+      debugPrint('Message: ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('PHONE AUTH UNKNOWN ERROR: $e');
+      rethrow;
+    }
+  }
+
+  await auth.verifyPhoneNumber(
+    phoneNumber: phone,
+    verificationCompleted: onVerificationCompleted,
+    verificationFailed: onVerificationFailed,
+    codeSent: onCodeSent,
+    codeAutoRetrievalTimeout: (verificationId) {
+      onCodeSent(verificationId, null);
+    },
+  );
+
+  return null;
+}
+
+  static Future<UserCredential> confirmPhoneCode({
+  required String code,
+  ConfirmationResult? confirmationResult,
+  String? verificationId,
+  bool linkToCurrentUser = false,
+}) async {
+  if (kIsWeb) {
+    if (confirmationResult == null) {
+      throw FirebaseAuthException(
+        code: 'missing-verification',
+        message: 'Request a verification code first.',
+      );
+    }
+
+    debugPrint('CONFIRM PHONE CODE START');
+    debugPrint('Code entered: ${code.trim()}');
+
+    try {
+      final result = await confirmationResult.confirm(code.trim());
+
+      debugPrint('CONFIRM PHONE CODE SUCCESS');
+      debugPrint('UID: ${result.user?.uid}');
+
+      return result;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('CONFIRM PHONE CODE ERROR: ${e.code}');
+      debugPrint('Message: ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('CONFIRM PHONE CODE UNKNOWN ERROR: $e');
+      rethrow;
+    }
+  }
+
+  if (verificationId == null || verificationId.isEmpty) {
+    throw FirebaseAuthException(
+      code: 'missing-verification',
+      message: 'Request a verification code first.',
+    );
+  }
+
+  final credential = PhoneAuthProvider.credential(
+    verificationId: verificationId,
+    smsCode: code.trim(),
+  );
+
+  if (linkToCurrentUser) {
+    return auth.currentUser!.linkWithCredential(credential);
+  }
+
+  return auth.signInWithCredential(credential);
+}
 
   static Future<void> verifyPhoneLogin({required String email, required String role}) async {
     final user = auth.currentUser;
@@ -224,28 +291,61 @@ static Future<void> _ensureRole(String role) async {
   }
 
   static Future<void> updateProfile({
-    required String name,
-    required String email,
-    required String address,
-    required String mobile,
-  }) async {
-    if (!isReady) throw StateError('Firebase has not been configured. Update firebase_options.dart with your project config.');
-    final user = auth.currentUser;
-    if (user == null) throw FirebaseAuthException(code: 'not-authenticated', message: 'User is not logged in.');
-    if (email.trim() != (user.email?.trim() ?? '')) {
-      throw FirebaseAuthException(code: 'email-change-forbidden', message: 'Email is managed by Firebase Auth and cannot be changed in this prototype.');
-    }
-    await firestore.collection('users').doc(user.uid).update({
-      'name': name.trim(),
-      'email': email.trim(),
-      'address': address.trim(),
-      'mobileNo': normalizePhone(mobile),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (mobile.trim().isNotEmpty) {
-      await firestore.collection('phoneLoginLookups').doc(_phoneLoginLookupId(mobile, email)).set({'createdAt': FieldValue.serverTimestamp()});
-    }
+  required String name,
+  required String email,
+  required String address,
+  required String mobile,
+}) async {
+  if (!isReady) {
+    throw StateError(
+      'Firebase has not been configured. Update firebase_options.dart with your project config.',
+    );
   }
+
+  final user = auth.currentUser;
+
+  if (user == null) {
+    throw FirebaseAuthException(
+      code: 'not-authenticated',
+      message: 'User is not logged in.',
+    );
+  }
+
+  final profileEmail = email.trim();
+  final authEmail = user.email?.trim();
+
+  // Email/password users have a Firebase Auth email.
+  // Do not allow changing it in this prototype.
+  //
+  // Phone users have no Firebase Auth email, so their
+  // Firestore profile email can be updated normally.
+  if (authEmail != null &&
+      authEmail.isNotEmpty &&
+      profileEmail.toLowerCase() != authEmail.toLowerCase()) {
+    throw FirebaseAuthException(
+      code: 'email-change-forbidden',
+      message:
+          'Email is managed by Firebase Auth and cannot be changed in this prototype.',
+    );
+  }
+
+  await firestore.collection('users').doc(user.uid).update({
+    'name': name.trim(),
+    'email': profileEmail,
+    'address': address.trim(),
+    'mobileNo': normalizePhone(mobile),
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+
+  if (mobile.trim().isNotEmpty) {
+    await firestore
+        .collection('phoneLoginLookups')
+        .doc(_phoneLoginLookupId(mobile, profileEmail))
+        .set({
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+}
 
   static Future<void> signOut() async {
     if (isReady) await auth.signOut();
