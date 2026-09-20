@@ -6,9 +6,16 @@ import '../../services/auth_service.dart';
 import '../../services/payment_service.dart';
 import 'payment_page.dart';
 
+String _formatDateTime(DateTime dt) {
+  final two = (int n) => n.toString().padLeft(2, '0');
+  return '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
+}
+
 /// Shows the signed-in customer's own logistics requests and their current
-/// status (pending/approved/rejected/cancelled), including the FR-08
-/// commitment-fee payment step once a request is approved.
+/// status (pending/approved/rejected/cancelled/assigned), including the
+/// FR-08 commitment-fee payment step and, once a team is assigned (FR-10),
+/// the FR-09 Operational Breakdown Display (driver, loaders, vehicle,
+/// expected arrival).
 class MyRequestsPage extends StatelessWidget {
   const MyRequestsPage({super.key});
 
@@ -16,6 +23,8 @@ class MyRequestsPage extends StatelessWidget {
     switch (status) {
       case 'approved':
         return const Color(0xFF16A34A);
+      case 'assigned':
+        return const Color(0xFF0F766E);
       case 'rejected':
       case 'cancelled':
         return const Color(0xFFDC2626);
@@ -48,18 +57,14 @@ class MyRequestsPage extends StatelessWidget {
                     ),
                   );
                 }
-                final requests =
-                    (snapshot.data?.docs ??
-                            const <
-                              QueryDocumentSnapshot<Map<String, dynamic>>
-                            >[])
-                        .map(ShipmentRequest.fromDoc)
-                        .toList()
-                      ..sort((a, b) {
-                        final aTime = a.createdAt?.millisecondsSinceEpoch ?? 0;
-                        final bTime = b.createdAt?.millisecondsSinceEpoch ?? 0;
-                        return bTime.compareTo(aTime);
-                      });
+                final requests = (snapshot.data?.docs ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                    .map(ShipmentRequest.fromDoc)
+                    .toList()
+                  ..sort((a, b) {
+                    final aTime = a.createdAt?.millisecondsSinceEpoch ?? 0;
+                    final bTime = b.createdAt?.millisecondsSinceEpoch ?? 0;
+                    return bTime.compareTo(aTime);
+                  });
 
                 if (requests.isEmpty) {
                   return Center(
@@ -68,16 +73,9 @@ class MyRequestsPage extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            Icons.inbox_outlined,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
+                          const Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
                           const SizedBox(height: 12),
-                          const Text(
-                            'No logistics requests yet',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
+                          const Text('No logistics requests yet', style: TextStyle(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
                           Text(
                             'Search the fleet and submit a booking to see it here.',
@@ -101,11 +99,8 @@ class MyRequestsPage extends StatelessWidget {
                     // FR-11: opportunistically auto-cancel if the commitment
                     // fee deadline has passed (no scheduled backend job in
                     // this prototype, so this runs whenever the list loads).
-                    if (request.status == 'approved' &&
-                        request.commitmentFeeStatus == 'unpaid') {
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => PaymentService.expireIfOverdue(request),
-                      );
+                    if (request.status == 'approved' && request.commitmentFeeStatus == 'unpaid') {
+                      WidgetsBinding.instance.addPostFrameCallback((_) => PaymentService.expireIfOverdue(request));
                     }
 
                     return Card(
@@ -114,42 +109,24 @@ class MyRequestsPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${request.pickupCity} → ${request.destinationCity}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
-                                    ),
-                                  ),
+                            Row(children: [
+                              Expanded(
+                                child: Text(
+                                  '${request.pickupCity} → ${request.destinationCity}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    request.status.toUpperCase(),
-                                    style: TextStyle(
-                                      color: statusColor,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                                child: Text(
+                                  request.status.toUpperCase(),
+                                  style: TextStyle(color: statusColor, fontWeight: FontWeight.w700, fontSize: 12),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ]),
                             const SizedBox(height: 6),
-                            Text(
-                              '${request.categoryName} · ${request.vehicleRegistrationNo}',
-                              style: TextStyle(color: Colors.grey.shade700),
-                            ),
+                            Text('${request.categoryName} · ${request.vehicleRegistrationNo}', style: TextStyle(color: Colors.grey.shade700)),
                             Text(
                               '${request.goodsType.isEmpty ? 'Goods' : request.goodsType} · '
                               '${request.estimatedWeightKg.toStringAsFixed(0)} kg · '
@@ -159,76 +136,66 @@ class MyRequestsPage extends StatelessWidget {
                             const SizedBox(height: 8),
                             Text(
                               'Quote: Rs ${request.totalQuote.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Color(0xFF0F766E),
-                              ),
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Color(0xFF0F766E)),
                             ),
-                            if (request.status == 'rejected' &&
-                                (request.rejectionReason ?? '').isNotEmpty) ...[
+                            if (request.status == 'rejected' && (request.rejectionReason ?? '').isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Text(
                                 'Reason: ${request.rejectionReason}',
-                                style: const TextStyle(
-                                  color: Color(0xFFDC2626),
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 13,
-                                ),
+                                style: const TextStyle(color: Color(0xFFDC2626), fontStyle: FontStyle.italic, fontSize: 13),
                               ),
                             ],
-                            if (request.status == 'cancelled' &&
-                                (request.cancelReason ?? '').isNotEmpty) ...[
+                            if (request.status == 'cancelled' && (request.cancelReason ?? '').isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Text(
                                 'Cancelled: ${request.cancelReason}',
-                                style: const TextStyle(
-                                  color: Color(0xFFDC2626),
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 13,
-                                ),
+                                style: const TextStyle(color: Color(0xFFDC2626), fontStyle: FontStyle.italic, fontSize: 13),
                               ),
                             ],
-                            if (request.status == 'approved' &&
-                                request.commitmentFeeStatus == 'unpaid') ...[
+                            if (request.status == 'approved' && request.commitmentFeeStatus == 'unpaid') ...[
                               const SizedBox(height: 12),
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          PaymentPage(request: request),
-                                    ),
-                                  ),
+                                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PaymentPage(request: request))),
                                   icon: const Icon(Icons.payment_outlined),
                                   label: Text(
                                     'Pay commitment fee (Rs ${(request.commitmentFeeAmount ?? request.totalQuote * 0.10).toStringAsFixed(0)})',
                                   ),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0F766E),
-                                  ),
+                                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F766E)),
                                 ),
                               ),
                             ],
-                            if (request.commitmentFeeStatus == 'paid') ...[
+                            if (request.commitmentFeeStatus == 'paid' && request.status != 'assigned') ...[
                               const SizedBox(height: 8),
-                              const Row(
-                                children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    color: Color(0xFF16A34A),
-                                    size: 16,
-                                  ),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Commitment fee paid',
-                                    style: TextStyle(
-                                      color: Color(0xFF16A34A),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                              const Row(children: [
+                                Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 16),
+                                SizedBox(width: 6),
+                                Text('Commitment fee paid \u2014 waiting on team assignment', style: TextStyle(color: Color(0xFF16A34A), fontWeight: FontWeight.w600)),
+                              ]),
+                            ],
+                            // FR-09 Operational Breakdown Display.
+                            if (request.status == 'assigned') ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: const Color(0xFFECFEFF), borderRadius: BorderRadius.circular(10)),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Operational Team', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0F766E))),
+                                    const SizedBox(height: 6),
+                                    Text('Driver: ${request.driverName ?? '—'}'),
+                                    if ((request.loader1Name ?? '').isNotEmpty || (request.loader2Name ?? '').isNotEmpty)
+                                      Text(
+                                        'Loaders: ${[request.loader1Name, request.loader2Name].where((s) => (s ?? '').isNotEmpty).join(', ')}',
+                                      ),
+                                    Text('Vehicle: ${request.vehicleRegistrationNo}'),
+                                    if (request.expectedArrivalAt != null)
+                                      Text('Expected arrival: ${_formatDateTime(request.expectedArrivalAt!.toDate())}'),
+                                  ],
+                                ),
                               ),
                             ],
                           ],

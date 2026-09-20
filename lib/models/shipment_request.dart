@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// A customer's submitted logistics request (FR-06). Starts life with
 /// status `pending`; FR-07 (admin review) adds `approved`/`rejected`
 /// transitions plus `reviewedAt`/`reviewedBy`; FR-08/FR-11 add
-/// commitment-fee tracking and auto-cancellation.
+/// commitment-fee tracking and auto-cancellation; FR-10 adds the assigned
+/// operational team (driver + loaders + expected arrival), at which point
+/// status becomes `assigned` and FR-09 shows this breakdown to the customer.
 class ShipmentRequest {
   const ShipmentRequest({
     required this.id,
@@ -30,6 +32,12 @@ class ShipmentRequest {
     this.commitmentFeeDueAt,
     this.commitmentFeePaidAt,
     this.cancelReason,
+    this.driverId,
+    this.driverName,
+    this.loader1Name,
+    this.loader2Name,
+    this.expectedArrivalAt,
+    this.assignedAt,
     this.createdAt,
   });
 
@@ -48,7 +56,7 @@ class ShipmentRequest {
   final double estimatedWeightKg;
   final Map<String, bool> addOns;
   final double totalQuote;
-  final String status; // pending | approved | rejected | cancelled
+  final String status; // pending | approved | rejected | cancelled | assigned
   final String? rejectionReason;
   final Timestamp? reviewedAt;
   final String? reviewedBy;
@@ -58,11 +66,16 @@ class ShipmentRequest {
   final Timestamp? commitmentFeeDueAt;
   final Timestamp? commitmentFeePaidAt;
   final String? cancelReason;
+  // FR-09 / FR-10: assigned operational team.
+  final String? driverId;
+  final String? driverName;
+  final String? loader1Name;
+  final String? loader2Name;
+  final Timestamp? expectedArrivalAt;
+  final Timestamp? assignedAt;
   final Timestamp? createdAt;
 
-  factory ShipmentRequest.fromDoc(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
+  factory ShipmentRequest.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
     final rawAddOns = data['addOns'] as Map<String, dynamic>? ?? const {};
     return ShipmentRequest(
@@ -79,9 +92,7 @@ class ShipmentRequest {
       urgency: data['urgency'] as String? ?? 'standard',
       goodsType: data['goodsType'] as String? ?? '',
       estimatedWeightKg: (data['estimatedWeightKg'] as num?)?.toDouble() ?? 0,
-      addOns: rawAddOns.map(
-        (key, value) => MapEntry(key, value as bool? ?? false),
-      ),
+      addOns: rawAddOns.map((key, value) => MapEntry(key, value as bool? ?? false)),
       totalQuote: (data['totalQuote'] as num?)?.toDouble() ?? 0,
       status: data['status'] as String? ?? 'pending',
       rejectionReason: data['rejectionReason'] as String?,
@@ -92,6 +103,12 @@ class ShipmentRequest {
       commitmentFeeDueAt: data['commitmentFeeDueAt'] as Timestamp?,
       commitmentFeePaidAt: data['commitmentFeePaidAt'] as Timestamp?,
       cancelReason: data['cancelReason'] as String?,
+      driverId: data['driverId'] as String?,
+      driverName: data['driverName'] as String?,
+      loader1Name: data['loader1Name'] as String?,
+      loader2Name: data['loader2Name'] as String?,
+      expectedArrivalAt: data['expectedArrivalAt'] as Timestamp?,
+      assignedAt: data['assignedAt'] as Timestamp?,
       createdAt: data['createdAt'] as Timestamp?,
     );
   }
