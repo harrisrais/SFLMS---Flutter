@@ -51,7 +51,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-        title: const Text('Driver Dashboard'),
+        title: const Text('Customer Dashboard'),
                 actions: [
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: NotificationService.streamForUser(AuthService.auth.currentUser?.uid ?? ''),

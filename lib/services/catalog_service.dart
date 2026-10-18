@@ -118,6 +118,7 @@ class CatalogService {
     ];
 
     final categoryRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+    final ratesByCategoryName = <String, int>{};
     for (final category in categories) {
       final ref = _categories.doc();
       batch.set(ref, {
@@ -126,6 +127,7 @@ class CatalogService {
         'createdAt': FieldValue.serverTimestamp(),
       });
       categoryRefs[category['name'] as String] = ref;
+      ratesByCategoryName[category['name'] as String] = category['baseFarePerKm'] as int;
     }
 
     const vehicles = [
@@ -145,6 +147,7 @@ class CatalogService {
       batch.set(ref, {
         'categoryId': categoryRef.id,
         'categoryName': vehicle['category'],
+        'baseFarePerKm': ratesByCategoryName[vehicle['category']] ?? 0,
         'registrationNo': vehicle['registrationNo'],
         'capacityKg': vehicle['capacityKg'],
         'serviceCities': vehicle['serviceCities'],

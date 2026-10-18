@@ -4,6 +4,16 @@ import 'package:flutter/material.dart';
 /// A category of fleet vehicle (e.g. Small Van, Refrigerated Truck) shown on
 /// the customer dashboard (FR-02) and used to scope search results (FR-03).
 class VehicleCategory {
+  static const Map<String, double> defaultRatesPerKm = {
+    'small van': 80,
+    'medium truck': 150,
+    'refrigerated truck': 220,
+    'heavy-duty truck': 300,
+  };
+
+  static double defaultRatePerKmFor(String categoryName) =>
+      defaultRatesPerKm[categoryName.trim().toLowerCase()] ?? 0;
+
   const VehicleCategory({
     required this.id,
     required this.name,

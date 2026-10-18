@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'vehicle_category.dart';
+
 /// A single vehicle in the fleet, searchable by pickup/destination, load
 /// capacity and urgency (FR-03). Assignment fields (driverId) are populated
 /// later by the admin task-assignment workflow (FR-10).
@@ -28,15 +30,24 @@ class FleetVehicle {
   final bool isAvailable;
   final String? driverId;
 
+  static double resolveBaseFarePerKm({required String categoryName, num? storedRate}) {
+    final rate = storedRate?.toDouble() ?? 0;
+    return rate > 0 ? rate : VehicleCategory.defaultRatePerKmFor(categoryName);
+  }
+
   factory FleetVehicle.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
+    final categoryName = data['categoryName'] as String? ?? 'Vehicle';
     return FleetVehicle(
       id: doc.id,
       categoryId: data['categoryId'] as String? ?? '',
-      categoryName: data['categoryName'] as String? ?? 'Vehicle',
+      categoryName: categoryName,
       registrationNo: data['registrationNo'] as String? ?? '—',
       capacityKg: (data['capacityKg'] as num?)?.toDouble() ?? 0,
-      baseFarePerKm: (data['baseFarePerKm'] as num?)?.toDouble() ?? 0,
+      baseFarePerKm: resolveBaseFarePerKm(
+        categoryName: categoryName,
+        storedRate: data['baseFarePerKm'] as num?,
+      ),
       serviceCities: (data['serviceCities'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
           .toList(),
