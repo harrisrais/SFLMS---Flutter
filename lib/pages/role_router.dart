@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import 'admin/admin_home_page.dart';
+import 'admin/home_page.dart';
 import 'customer/home_page.dart';
-import 'driver_home_page.dart';
+import 'driver/home_page.dart';
 import 'profile_page.dart';
 
 /// After authentication, routes the user to their role-specific home screen
