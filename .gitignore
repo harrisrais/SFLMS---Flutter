@@ -1,0 +1,43 @@
+# Flutter and Dart generated files
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# IDE and local tooling
+.idea/
+*.iml
+.vscode/
+*.log
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+firebase-debug.log
+firebase-export-*/
+functions/.runtimeconfig.json
+functions/.env
+functions/.env.*
+
+# Firebase and platform credentials
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+
+# Firebase Functions dependencies and local output
+functions/node_modules/
+functions/lib/
+functions/.firebase/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini

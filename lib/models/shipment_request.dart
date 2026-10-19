@@ -31,6 +31,15 @@ class ShipmentRequest {
     this.commitmentFeeStatus,
     this.commitmentFeeDueAt,
     this.commitmentFeePaidAt,
+    this.paymentId,
+    this.pickupPaymentAmount,
+    this.pickupPaymentStatus,
+    this.pickupPaymentId,
+    this.deliveryPaymentAmount,
+    this.deliveryPaymentStatus,
+    this.deliveryPaymentId,
+    this.proofOfDelivery,
+    this.deliveredAt,
     this.cancelReason,
     this.driverId,
     this.driverName,
@@ -38,6 +47,8 @@ class ShipmentRequest {
     this.loader2Name,
     this.expectedArrivalAt,
     this.assignedAt,
+    this.scheduledPickupAt,
+    this.cancellationFeeAmount,
     this.createdAt,
   });
 
@@ -65,6 +76,15 @@ class ShipmentRequest {
   final String? commitmentFeeStatus; // null | 'unpaid' | 'paid' | 'expired'
   final Timestamp? commitmentFeeDueAt;
   final Timestamp? commitmentFeePaidAt;
+  final String? paymentId;
+  final double? pickupPaymentAmount;
+  final String? pickupPaymentStatus;
+  final String? pickupPaymentId;
+  final double? deliveryPaymentAmount;
+  final String? deliveryPaymentStatus;
+  final String? deliveryPaymentId;
+  final Map<String, dynamic>? proofOfDelivery;
+  final Timestamp? deliveredAt;
   final String? cancelReason;
   // FR-09 / FR-10: assigned operational team.
   final String? driverId;
@@ -73,6 +93,8 @@ class ShipmentRequest {
   final String? loader2Name;
   final Timestamp? expectedArrivalAt;
   final Timestamp? assignedAt;
+  final Timestamp? scheduledPickupAt;
+  final double? cancellationFeeAmount;
   final Timestamp? createdAt;
 
   factory ShipmentRequest.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -102,6 +124,15 @@ class ShipmentRequest {
       commitmentFeeStatus: data['commitmentFeeStatus'] as String?,
       commitmentFeeDueAt: data['commitmentFeeDueAt'] as Timestamp?,
       commitmentFeePaidAt: data['commitmentFeePaidAt'] as Timestamp?,
+      paymentId: data['paymentId'] as String?,
+      pickupPaymentAmount: (data['pickupPaymentAmount'] as num?)?.toDouble(),
+      pickupPaymentStatus: data['pickupPaymentStatus'] as String?,
+      pickupPaymentId: data['pickupPaymentId'] as String?,
+      deliveryPaymentAmount: (data['deliveryPaymentAmount'] as num?)?.toDouble(),
+      deliveryPaymentStatus: data['deliveryPaymentStatus'] as String?,
+      deliveryPaymentId: data['deliveryPaymentId'] as String?,
+      proofOfDelivery: data['proofOfDelivery'] as Map<String, dynamic>?,
+      deliveredAt: data['deliveredAt'] as Timestamp?,
       cancelReason: data['cancelReason'] as String?,
       driverId: data['driverId'] as String?,
       driverName: data['driverName'] as String?,
@@ -109,6 +140,8 @@ class ShipmentRequest {
       loader2Name: data['loader2Name'] as String?,
       expectedArrivalAt: data['expectedArrivalAt'] as Timestamp?,
       assignedAt: data['assignedAt'] as Timestamp?,
+      scheduledPickupAt: data['scheduledPickupAt'] as Timestamp?,
+      cancellationFeeAmount: (data['cancellationFeeAmount'] as num?)?.toDouble(),
       createdAt: data['createdAt'] as Timestamp?,
     );
   }

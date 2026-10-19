@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import 'admin/home_page.dart';
 import 'customer/home_page.dart';
 import 'driver/home_page.dart';
@@ -21,6 +22,7 @@ class _RoleRouterState extends State<RoleRouter> {
   Future<String?> _loadRole() async {
     try {
       final profile = await AuthService.fetchProfile();
+      await NotificationService.registerDevice();
       return profile['role'] as String?;
     } catch (_) {
       return null;

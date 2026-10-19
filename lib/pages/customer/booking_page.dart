@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/distance_service.dart';
 import '../../services/pricing_service.dart';
 import 'my_requests_page.dart';
+import 'map_picker_page.dart';
 
 /// FR-04 Booking and Service Selection + FR-05 Load Customization and Price
 /// Quote + FR-06 Shipment Request Submission, combined into one flow since
@@ -53,6 +54,8 @@ class _BookingPageState extends State<BookingPage> {
   bool _packing = false;
   bool _labor = false;
   bool _submitting = false;
+  bool _routing = false;
+  late DateTime _scheduledPickup = DateTime.now().add(const Duration(days: 1));
 
   List<TextEditingController> get _liveControllers => [
         _pickupController,
@@ -88,9 +91,41 @@ class _BookingPageState extends State<BookingPage> {
     super.dispose();
   }
 
-  void _autoEstimateDistance() {
-    final estimate = DistanceService.estimateKm(_pickupController.text, _destinationController.text);
-    _distanceController.text = estimate.toStringAsFixed(0);
+  Future<void> _autoEstimateDistance() async {
+    setState(() => _routing = true);
+    final estimate = await DistanceService.routeDistanceKm(_pickupController.text, _destinationController.text);
+    if (mounted) {
+      _distanceController.text = estimate.toStringAsFixed(1);
+      setState(() => _routing = false);
+    }
+  }
+
+  Future<void> _pickLocation({required bool pickup}) async {
+    final result = await Navigator.of(context).push<MapSelection>(
+      MaterialPageRoute(
+        builder: (_) => MapPickerPage(
+          title: pickup ? 'Choose pickup location' : 'Choose destination',
+          initialCity: pickup ? _pickupController.text : _destinationController.text,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    final controller = pickup ? _pickupController : _destinationController;
+    controller.text = result.city;
+    await _autoEstimateDistance();
+  }
+
+  Future<void> _choosePickupTime() async {
+    final date = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().add(const Duration(hours: 12)),
+      lastDate: DateTime.now().add(const Duration(days: 180)),
+      initialDate: _scheduledPickup,
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_scheduledPickup));
+    if (time == null) return;
+    setState(() => _scheduledPickup = DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   PricingBreakdown _breakdown() {
@@ -147,6 +182,7 @@ class _BookingPageState extends State<BookingPage> {
           'addOnCharges': breakdown.addOnCharges,
         },
         'totalQuote': breakdown.totalQuote,
+        'scheduledPickupAt': Timestamp.fromDate(_scheduledPickup),
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -221,7 +257,7 @@ class _BookingPageState extends State<BookingPage> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Pickup and drop-off use city names for now. Map pin selection will replace this once a Google Maps API key is available.',
+                              'Choose a city by searching or tapping the OpenStreetMap map. Routing uses OSRM with an offline fallback.',
                               style: TextStyle(color: Colors.grey.shade800, fontSize: 13),
                             ),
                           ),
@@ -249,6 +285,26 @@ class _BookingPageState extends State<BookingPage> {
                             ),
                           ),
                         ]),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _pickLocation(pickup: true),
+                                icon: const Icon(Icons.location_searching_outlined),
+                                label: const Text('Pick on map'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _pickLocation(pickup: false),
+                                icon: const Icon(Icons.pin_drop_outlined),
+                                label: const Text('Drop-off on map'),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 16),
                         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Expanded(
@@ -264,15 +320,15 @@ class _BookingPageState extends State<BookingPage> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: OutlinedButton.icon(
-                              onPressed: _autoEstimateDistance,
+                              onPressed: _routing ? null : _autoEstimateDistance,
                               icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
-                              label: const Text('Auto-estimate'),
+                              label: Text(_routing ? 'Routing...' : 'Route with OSM'),
                             ),
                           ),
                         ]),
                         const SizedBox(height: 4),
                         Text(
-                          'Placeholder estimate from a city lookup table until FR-17 GPS routing is wired in — feel free to adjust.',
+                          'Distance is calculated with open-source routing and falls back to the local city table when offline.',
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                         ),
                         const SizedBox(height: 16),
@@ -372,6 +428,19 @@ class _BookingPageState extends State<BookingPage> {
                           onChanged: (v) => setState(() => _labor = v ?? false),
                           title: const Text('Labor for Loading/Unloading'),
                           subtitle: Text('Flat fee: ${_money(PricingService.laborFee)}'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _SectionCard(
+                      title: 'Pickup schedule',
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.event_available_outlined, color: Color(0xFF0F766E)),
+                          title: Text('${_scheduledPickup.day}/${_scheduledPickup.month}/${_scheduledPickup.year} at ${TimeOfDay.fromDateTime(_scheduledPickup).format(context)}'),
+                          subtitle: const Text('Changes and cancellations close 12 hours before pickup.'),
+                          trailing: IconButton(icon: const Icon(Icons.edit_calendar_outlined), tooltip: 'Change pickup time', onPressed: _choosePickupTime),
                         ),
                       ],
                     ),

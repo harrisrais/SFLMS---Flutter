@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/shipment_request.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/payment_service.dart';
 import '../login_page.dart';
 import '../profile_page.dart';
 
@@ -248,10 +249,75 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  Future<void> _verifyPayment(ShipmentRequest request) async {
+    final paymentId = request.commitmentFeeStatus == 'pending_verification'
+        ? request.paymentId
+        : request.pickupPaymentStatus == 'pending_verification'
+            ? request.pickupPaymentId
+            : request.deliveryPaymentId;
+    if (_processing || paymentId == null) return;
+    setState(() => _processing = true);
+    try {
+      await PaymentService.verifyPayment(requestId: request.id, paymentId: paymentId);
+      await NotificationService.create(
+        userId: request.customerId,
+        title: 'Payment verified',
+        body: 'Your payment was verified. The shipment can continue to its next stage.',
+        type: 'payment_verified',
+        requestId: request.id,
+      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment verified.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unable to verify payment: $e')));
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
+  Future<void> _closeTrip(ShipmentRequest request) async {
+    final hasCustomerSignature = (request.proofOfDelivery?['customerSignature'] as String? ?? '').isNotEmpty;
+    if (_processing || request.status != 'delivered' || request.deliveryPaymentStatus != 'paid' || !hasCustomerSignature) return;
+    setState(() => _processing = true);
+    try {
+      final batch = _firestore.batch();
+      batch.update(_firestore.collection('shipmentRequests').doc(request.id), {
+        'status': 'closed',
+        'closedAt': FieldValue.serverTimestamp(),
+        'closedBy': AuthService.auth.currentUser?.uid,
+        'driverId': FieldValue.delete(),
+        'driverName': FieldValue.delete(),
+      });
+      batch.update(_firestore.collection('fleetVehicles').doc(request.vehicleId), {
+        'isAvailable': true,
+        'driverId': FieldValue.delete(),
+        'releasedAt': FieldValue.serverTimestamp(),
+      });
+      if (request.driverId != null) {
+        batch.update(_firestore.collection('users').doc(request.driverId), {
+          'isAvailable': true,
+          'assignedRequestId': FieldValue.delete(),
+        });
+      }
+      await batch.commit();
+      await NotificationService.create(
+        userId: request.customerId,
+        title: 'Trip closed',
+        body: 'Your delivery was formally closed by the administrator. Thank you for using SFLMS.',
+        type: 'trip_closed',
+        requestId: request.id,
+      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Trip closed and resources released.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unable to close trip: $e')));
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Review'),
@@ -269,6 +335,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
             Tab(text: 'Approved'),
             Tab(text: 'Assigned'),
             Tab(text: 'Rejected'),
+            Tab(text: 'Pickup payments'),
+            Tab(text: 'Delivery payments'),
           ]),
         ),
         body: TabBarView(children: [
@@ -279,9 +347,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
             onApprove: _approveRequest,
             onReject: _rejectRequest,
             onAssign: _assignTeam,
+            onVerifyPayment: _verifyPayment,
           ),
           _RequestsList(status: 'assigned', processing: _processing, onApprove: _approveRequest, onReject: _rejectRequest),
           _RequestsList(status: 'rejected', processing: _processing, onApprove: _approveRequest, onReject: _rejectRequest),
+          _RequestsList(status: 'pickup_arrived', processing: _processing, onApprove: _approveRequest, onReject: _rejectRequest, onVerifyPayment: _verifyPayment),
+          _RequestsList(status: 'delivered', processing: _processing, onApprove: _approveRequest, onReject: _rejectRequest, onVerifyPayment: _verifyPayment, onCloseTrip: _closeTrip),
         ]),
       ),
     );
@@ -295,6 +366,8 @@ class _RequestsList extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     this.onAssign,
+    this.onVerifyPayment,
+    this.onCloseTrip,
   });
 
   final String status;
@@ -302,6 +375,8 @@ class _RequestsList extends StatelessWidget {
   final ValueChanged<ShipmentRequest> onApprove;
   final ValueChanged<ShipmentRequest> onReject;
   final ValueChanged<ShipmentRequest>? onAssign;
+  final ValueChanged<ShipmentRequest>? onVerifyPayment;
+  final ValueChanged<ShipmentRequest>? onCloseTrip;
 
   @override
   Widget build(BuildContext context) {
@@ -446,6 +521,33 @@ class _RequestsList extends StatelessWidget {
                           onPressed: processing ? null : () => onAssign?.call(request),
                           icon: const Icon(Icons.groups_outlined),
                           label: const Text('Assign Operational Team'),
+                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F766E)),
+                        ),
+                      ),
+                    ],
+                    if ((status == 'approved' && request.commitmentFeeStatus == 'pending_verification') ||
+                      (status == 'pickup_arrived' && request.pickupPaymentStatus == 'pending_verification') ||
+                      (status == 'delivered' && request.deliveryPaymentStatus == 'pending_verification')) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: processing ? null : () => onVerifyPayment?.call(request),
+                          icon: const Icon(Icons.verified_outlined),
+                          label: const Text('Verify mock payment'),
+                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F766E)),
+                        ),
+                      ),
+                    ],
+                    if (status == 'delivered' && request.deliveryPaymentStatus == 'paid' &&
+                        (request.proofOfDelivery?['customerSignature'] as String? ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: processing ? null : () => onCloseTrip?.call(request),
+                          icon: const Icon(Icons.lock_outline),
+                          label: const Text('Close trip and release resources'),
                           style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F766E)),
                         ),
                       ),

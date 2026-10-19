@@ -10,7 +10,9 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow get: if request.auth != null && request.auth.uid == userId;
       allow list: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (request.auth.uid == userId ||
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAvailable', 'assignedRequestId'])));
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
 match /phoneLoginLookups/{lookupId} {
@@ -48,7 +50,10 @@ match /fleetVehicles/{vehicleId} {
         (request.auth.uid == resource.data.customerId ||
          request.auth.uid == resource.data.driverId ||
          isAdmin());
-      allow update: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.customerId);
+      allow update: if isAdmin() ||
+        (request.auth != null && request.auth.uid == resource.data.customerId) ||
+        (request.auth != null && request.auth.uid == resource.data.driverId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusUpdatedAt', 'deliveredAt', 'proofOfDelivery', 'liveLocation', 'locationUpdatedAt']));
       allow delete: if false;
     }
 
@@ -61,6 +66,18 @@ match /fleetVehicles/{vehicleId} {
       allow get, list: if request.auth != null && request.auth.uid == resource.data.userId;
       allow update: if request.auth != null && request.auth.uid == resource.data.userId;
       allow delete: if false;
+    }
+
+    match /fcmTokens/{tokenId} {
+      allow create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    match /payments/{paymentId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow get: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+      allow list, delete: if false;
     }
   }
 }

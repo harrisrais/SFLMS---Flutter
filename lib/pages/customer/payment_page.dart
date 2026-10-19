@@ -8,8 +8,10 @@ import '../../services/payment_service.dart';
 /// Swap `PaymentService.payCommitmentFee`'s body for a real JazzCash/
 /// EasyPaisa API call later; this screen itself doesn't need to change.
 class PaymentPage extends StatefulWidget {
-  const PaymentPage({super.key, required this.request});
+  const PaymentPage({super.key, required this.request, this.stage = 'commitment', this.stageAmount});
   final ShipmentRequest request;
+  final String stage;
+  final double? stageAmount;
 
   @override
   State<PaymentPage> createState() => _PaymentPageState();
@@ -32,7 +34,12 @@ class _PaymentPageState extends State<PaymentPage> {
   Future<void> _payNow() async {
     setState(() => _paying = true);
     try {
-      await PaymentService.payCommitmentFee(widget.request.id);
+      final amount = widget.stageAmount ?? widget.request.commitmentFeeAmount ?? (widget.request.totalQuote * 0.10);
+      if (widget.stage == 'commitment') {
+        await PaymentService.payCommitmentFee(widget.request.id, amount: amount);
+      } else {
+        await PaymentService.payStage(request: widget.request, stage: widget.stage, amount: amount);
+      }
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -42,10 +49,8 @@ class _PaymentPageState extends State<PaymentPage> {
             color: Color(0xFF16A34A),
             size: 40,
           ),
-          title: const Text('Payment successful'),
-          content: const Text(
-            'Your commitment fee has been recorded. The operational team will be assigned next.',
-          ),
+          title: const Text('Payment submitted'),
+          content: const Text('Your mock payment has been submitted. An admin must verify it before the operational team is assigned.'),
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -72,7 +77,7 @@ class _PaymentPageState extends State<PaymentPage> {
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
-    final amount = request.commitmentFeeAmount ?? (request.totalQuote * 0.10);
+    final amount = widget.stageAmount ?? request.commitmentFeeAmount ?? (request.totalQuote * 0.10);
     return Scaffold(
       appBar: AppBar(title: const Text('Commitment Fee'), centerTitle: true),
       body: SafeArea(
@@ -97,8 +102,7 @@ class _PaymentPageState extends State<PaymentPage> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'This is a demo payment step. Tapping "Pay now" simulates a successful payment \u2014 '
-                              'a real JazzCash/EasyPaisa gateway can be dropped in later without changing this screen.',
+                              'This mock gateway creates a payment transaction for admin verification. No real money is transferred.',
                               style: TextStyle(
                                 color: Colors.grey.shade800,
                                 fontSize: 13,
@@ -142,8 +146,10 @@ class _PaymentPageState extends State<PaymentPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Commitment fee (10%)',
+                              Text(
+                                widget.stage == 'commitment'
+                                    ? 'Commitment fee (10%)'
+                                    : '${widget.stage[0].toUpperCase()}${widget.stage.substring(1)} payment',
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                               Text(
