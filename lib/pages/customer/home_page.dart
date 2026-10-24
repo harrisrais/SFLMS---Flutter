@@ -12,8 +12,8 @@ import 'notifications_page.dart';
 import 'search_page.dart';
 
 
-/// FR-02 Service Dashboard: shows available vehicle categories loaded live
-/// from Firestore, plus an entry point into fleet search (FR-03).
+/// Shows available vehicle categories from Firestore and provides access to
+/// fleet search.
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
 

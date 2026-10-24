@@ -9,9 +9,8 @@ import '../../services/pricing_service.dart';
 import 'my_requests_page.dart';
 import 'map_picker_page.dart';
 
-/// FR-04 Booking and Service Selection + FR-05 Load Customization and Price
-/// Quote + FR-06 Shipment Request Submission, combined into one flow since
-/// the quote needs everything the customer enters on this screen.
+/// Combines booking details, cargo customization, price quote, and request
+/// submission into one flow.
 ///
 /// Pickup/drop-off are plain city fields rather than a map pin-drop for now
 /// (no Google Maps API key configured yet); swap in a map widget here once
@@ -480,7 +479,7 @@ class _BookingPageState extends State<BookingPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Submitting sends this request for admin review (FR-07). No payment is taken yet.',
+                      'Your request will be sent for admin review. No payment is taken yet.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../models/shipment_request.dart';
 import '../../services/payment_service.dart';
 
-/// FR-08 Initial Security Deposit: collects the 10% Commitment Fee. This is
-/// a mock gateway screen — tapping "Pay now" simulates success immediately.
+/// Collects the 10% commitment fee through a mock payment gateway. Tapping
+/// "Pay now" simulates success immediately.
 /// Swap `PaymentService.payCommitmentFee`'s body for a real JazzCash/
 /// EasyPaisa API call later; this screen itself doesn't need to change.
 class PaymentPage extends StatefulWidget {

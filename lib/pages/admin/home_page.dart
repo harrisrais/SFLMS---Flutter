@@ -13,14 +13,8 @@ String _formatDateTime(DateTime dt) {
   return '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
 }
 
-/// FR-07 Admin Review and Confirmation: logistics managers review pending
-/// requests, validate route/load details, and approve or reject them.
-/// FR-08 Initial Security Deposit: approving a request also sets up the
-/// 10% commitment fee (amount, unpaid status, 24h due time).
-/// FR-10 Task Assignment: once the fee is paid, the admin assigns a driver,
-/// two loaders, and an expected pickup arrival time, moving the request to
-/// an `assigned` status that both the driver's dashboard and the
-/// customer's My Requests (FR-09) read from.
+/// Lets logistics managers review requests, configure the commitment fee,
+/// and assign a driver, loaders, and expected pickup time.
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
 
@@ -51,7 +45,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         'rejectionReason': FieldValue.delete(),
         'reviewedAt': FieldValue.serverTimestamp(),
         'reviewedBy': AuthService.auth.currentUser?.uid,
-        // FR-08: set up the commitment fee the customer must pay within 24h.
+        // Set up the commitment fee due within 24 hours.
         'commitmentFeeAmount': request.totalQuote * 0.10,
         'commitmentFeeStatus': 'unpaid',
         'commitmentFeeDueAt': Timestamp.fromDate(DateTime.now().add(const Duration(hours: 24))),
@@ -203,9 +197,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  /// FR-10: opens the Assign Team dialog and, if the admin confirms it,
-  /// writes the driver/loaders/expected arrival and flips status to
-  /// 'assigned'.
+  /// Opens the team assignment dialog and saves the assignment on approval.
   Future<void> _assignTeam(ShipmentRequest request) async {
     final result = await showDialog<_TeamAssignment>(
       context: context,
@@ -586,8 +578,7 @@ class _TeamAssignment {
   final DateTime expectedArrival;
 }
 
-/// FR-10: form for picking a driver (from registered driver accounts), two
-/// loader names, and an expected arrival time.
+/// Form for selecting a registered driver, loader names, and expected arrival.
 class _AssignTeamDialog extends StatefulWidget {
   const _AssignTeamDialog({required this.request});
   final ShipmentRequest request;

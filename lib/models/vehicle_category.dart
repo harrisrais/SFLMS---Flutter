@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-/// A category of fleet vehicle (e.g. Small Van, Refrigerated Truck) shown on
-/// the customer dashboard (FR-02) and used to scope search results (FR-03).
+/// A category of fleet vehicle shown on the customer dashboard and used to
+/// scope search results.
 class VehicleCategory {
   static const Map<String, double> defaultRatesPerKm = {
     'small van': 80,

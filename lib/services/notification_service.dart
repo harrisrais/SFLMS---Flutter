@@ -4,8 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'auth_service.dart';
 import '../firebase_env.dart';
 
-/// In-app stand-in for FR-16's Firebase Cloud Messaging push notifications.
-/// Writing a document here shows up immediately in the customer's
+/// In-app notifications are stored in Firestore and appear immediately in the customer's
 /// NotificationsPage via a live stream. Swapping this for a real FCM push
 /// later (e.g. a Cloud Function triggered on write to this collection)
 /// won't require changing any of the call sites below.

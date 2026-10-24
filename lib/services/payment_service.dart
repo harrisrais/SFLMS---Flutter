@@ -4,8 +4,8 @@ import '../models/shipment_request.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
 
-/// Mock payment gateway for FR-08 (Commitment Fee) and, later, FR-13/FR-14's
-/// staged payments. `payCommitmentFee` just marks the fee paid — swap its
+/// Mock payment gateway for the commitment fee and staged payments.
+/// `payCommitmentFee` records the fee as paid — swap its
 /// body for a real JazzCash/EasyPaisa REST call once merchant access is
 /// sorted out; nothing that calls this service needs to change.
 class PaymentService {
@@ -80,8 +80,8 @@ class PaymentService {
     }
   }
 
-  /// FR-11 Auto-Cancellation Logic: if an approved request's commitment fee
-  /// is still unpaid past its 24-hour due time, cancel it and free the
+  /// If an approved request's commitment fee is still unpaid past its
+  /// 24-hour due time, cancel it and free the
   /// vehicle slot. There's no real scheduled backend job here — a proper
   /// cron needs a Cloud Function on the paid Blaze plan — so this runs
   /// opportunistically whenever a customer screen loads the request.

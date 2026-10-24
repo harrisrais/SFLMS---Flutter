@@ -5,10 +5,9 @@ import '../models/vehicle_category.dart';
 import 'auth_service.dart';
 
 /// Reads (and, for now, seeds) the `vehicleCategories` and `fleetVehicles`
-/// collections that back the customer dashboard (FR-02) and fleet search
-/// (FR-03). Writes will move behind an admin-only role once FR-07 introduces
-/// logistics-manager accounts; for this prototype phase any authenticated
-/// user may seed sample data (see firestore.rules).
+/// collections that back the customer dashboard and fleet search. Writes
+/// will move behind an admin-only role once fleet management is available;
+/// for now, any authenticated user may seed sample data.
 class CatalogService {
   static CollectionReference<Map<String, dynamic>> get _categories =>
       AuthService.firestore.collection('vehicleCategories');
@@ -16,7 +15,7 @@ class CatalogService {
   static CollectionReference<Map<String, dynamic>> get _vehicles =>
       AuthService.firestore.collection('fleetVehicles');
 
-  /// Streams active vehicle categories for the dashboard grid (FR-02).
+  /// Streams active vehicle categories for the dashboard grid.
   static Stream<List<VehicleCategory>> streamActiveCategories() {
     return _categories.where('isActive', isEqualTo: true).snapshots().map((snapshot) {
       final categories = snapshot.docs.map(VehicleCategory.fromDoc).toList();
@@ -26,7 +25,7 @@ class CatalogService {
   }
 
   /// Searches available vehicles by pickup/destination city, minimum load
-  /// capacity and urgency (FR-03). City and capacity filters are applied
+  /// capacity, and urgency. City and capacity filters are applied
   /// client-side after a small server-side availability query, which is fine
   /// at this fleet size and avoids extra Firestore composite indexes.
   static Future<List<FleetVehicle>> searchVehicles({
@@ -73,8 +72,8 @@ class CatalogService {
   }
 
   /// One-time helper to populate demo categories and vehicles so the
-  /// dashboard and search screens have real Firestore data to show before
-  /// an admin panel (FR-07) exists to manage the fleet.
+  /// dashboard and search screens have Firestore data before an admin panel
+  /// is available to manage the fleet.
   static Future<void> seedSampleCatalog() async {
     final batch = AuthService.firestore.batch();
 

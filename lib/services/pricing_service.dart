@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-/// Line-item breakdown of an automated price quote (FR-05).
+/// Line-item breakdown of an automated price quote.
 class PricingBreakdown {
   const PricingBreakdown({
     required this.distanceKm,
@@ -25,9 +25,9 @@ class PricingBreakdown {
   final double totalQuote;
 }
 
-/// Computes the automated price quote described in FR-05: distance ×
+/// Computes an automated price quote: distance ×
 /// vehicle rate, plus a weight-based charge, an express-delivery surcharge,
-/// and any selected value-added services from FR-04. Rates are centralized
+/// and any selected value-added services. Rates are centralized
 /// here as named constants so they're easy to tune for the FYP write-up
 /// without touching the UI.
 class PricingService {

@@ -5,10 +5,8 @@ import '../../models/app_notification.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 
-/// Shows booking-status notifications (approved/rejected/cancelled, and
-/// later payment/dispatch/delivery updates) written by admin actions or the
-/// FR-11 auto-cancel job. Tapping a notification marks it read. This is the
-/// in-app view of what FR-16 will eventually also push via FCM.
+/// Shows booking, payment, dispatch, and delivery notifications. Tapping a
+/// notification marks it as read.
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 

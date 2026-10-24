@@ -1,9 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// An in-app notification, currently the stand-in for FR-16's Firebase
-/// Cloud Messaging push notifications. Written by NotificationService
-/// whenever an admin changes a shipment request's status (FR-07/FR-08)
-/// or the system auto-cancels a booking (FR-11).
+/// An in-app notification written when a shipment's status changes or a
+/// booking is automatically cancelled.
 class AppNotification {
   const AppNotification({
     required this.id,

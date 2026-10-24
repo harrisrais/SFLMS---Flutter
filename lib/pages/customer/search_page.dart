@@ -5,10 +5,8 @@ import '../../models/fleet_vehicle.dart';
 import '../../models/vehicle_category.dart';
 import '../../services/catalog_service.dart';
 import 'booking_page.dart';
-/// FR-03 Search and Filter: lets customers search available fleet vehicles
-/// by pickup/destination city, load capacity and urgency (Standard vs
-/// Express). If opened from a dashboard category card, results are scoped
-/// to that category.
+/// Lets customers search available vehicles by route, load capacity, and
+/// urgency. Results can be scoped to a dashboard category.
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key, this.initialCategory});
   final VehicleCategory? initialCategory;

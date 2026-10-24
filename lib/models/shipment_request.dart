@@ -1,11 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A customer's submitted logistics request (FR-06). Starts life with
-/// status `pending`; FR-07 (admin review) adds `approved`/`rejected`
-/// transitions plus `reviewedAt`/`reviewedBy`; FR-08/FR-11 add
-/// commitment-fee tracking and auto-cancellation; FR-10 adds the assigned
-/// operational team (driver + loaders + expected arrival), at which point
-/// status becomes `assigned` and FR-09 shows this breakdown to the customer.
+/// A customer's submitted logistics request, including its review status,
+/// payment details, assigned operational team, and delivery information.
 class ShipmentRequest {
   const ShipmentRequest({
     required this.id,
@@ -71,7 +67,7 @@ class ShipmentRequest {
   final String? rejectionReason;
   final Timestamp? reviewedAt;
   final String? reviewedBy;
-  // FR-08 / FR-11: commitment (deposit) fee tracking.
+  // Commitment (deposit) fee tracking.
   final double? commitmentFeeAmount;
   final String? commitmentFeeStatus; // null | 'unpaid' | 'paid' | 'expired'
   final Timestamp? commitmentFeeDueAt;
@@ -86,7 +82,7 @@ class ShipmentRequest {
   final Map<String, dynamic>? proofOfDelivery;
   final Timestamp? deliveredAt;
   final String? cancelReason;
-  // FR-09 / FR-10: assigned operational team.
+  // Assigned operational team.
   final String? driverId;
   final String? driverName;
   final String? loader1Name;

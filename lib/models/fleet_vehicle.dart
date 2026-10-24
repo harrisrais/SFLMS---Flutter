@@ -2,9 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'vehicle_category.dart';
 
-/// A single vehicle in the fleet, searchable by pickup/destination, load
-/// capacity and urgency (FR-03). Assignment fields (driverId) are populated
-/// later by the admin task-assignment workflow (FR-10).
+/// A fleet vehicle searchable by route, load capacity, and urgency.
+/// Assignment fields are populated by the admin task-assignment workflow.
 class FleetVehicle {
   const FleetVehicle({
     required this.id,

@@ -69,10 +69,8 @@ Future<void> _advanceTask(BuildContext context, ShipmentRequest task, String sta
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not complete delivery: $e')));
     }
   }
-/// FR-10 Task Assignment: shows the tasks an admin has assigned to this
-/// driver (route, cargo, loaders, expected arrival). Pickup/drop-off map
-/// navigation will be added once a Google Maps API key is available
-/// (FR-17); for now the route is shown as city names only.
+/// Shows the driver's assigned tasks, including route, cargo, loaders, and
+/// expected arrival details.
 class DriverHomePage extends StatelessWidget {
   const DriverHomePage({super.key});
 
@@ -202,7 +200,7 @@ class DriverHomePage extends StatelessWidget {
                                 const Icon(Icons.map_outlined, size: 14, color: Color(0xFF0F766E)),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Map navigation to ${task.pickupCity} \u2192 ${task.destinationCity} coming with FR-17',
+                                  'Route overview: ${task.pickupCity} \u2192 ${task.destinationCity}',
                                   style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E)),
                                 ),
                               ]),

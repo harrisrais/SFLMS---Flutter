@@ -15,10 +15,7 @@ String _formatDateTime(DateTime dt) {
 }
 
 /// Shows the signed-in customer's own logistics requests and their current
-/// status (pending/approved/rejected/cancelled/assigned), including the
-/// FR-08 commitment-fee payment step and, once a team is assigned (FR-10),
-/// the FR-09 Operational Breakdown Display (driver, loaders, vehicle,
-/// expected arrival).
+/// status, commitment-fee payment, and assigned operational team details.
 class MyRequestsPage extends StatelessWidget {
   const MyRequestsPage({super.key});
 
@@ -99,9 +96,7 @@ class MyRequestsPage extends StatelessWidget {
                     final request = requests[index];
                     final statusColor = _statusColor(request.status);
 
-                    // FR-11: opportunistically auto-cancel if the commitment
-                    // fee deadline has passed (no scheduled backend job in
-                    // this prototype, so this runs whenever the list loads).
+                    // Check for overdue commitment fees when the request list loads.
                     if (request.status == 'approved' && request.commitmentFeeStatus == 'unpaid') {
                       WidgetsBinding.instance.addPostFrameCallback((_) async {
                         await PaymentService.expireIfOverdue(request);
@@ -274,7 +269,7 @@ class MyRequestsPage extends StatelessWidget {
                                 Text('Commitment fee paid \u2014 waiting on team assignment', style: TextStyle(color: Color(0xFF16A34A), fontWeight: FontWeight.w600)),
                               ]),
                             ],
-                            // FR-09 Operational Breakdown Display.
+                            // Assigned operational team details.
                             if (request.status == 'assigned') ...[
                               const SizedBox(height: 12),
                               Container(
